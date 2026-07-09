@@ -45,7 +45,20 @@ def _map_esp_reading(data: Dict[str, Any], device_id: str) -> Dict[str, Any]:
     """
     temperature = float(data.get("suhu", 0.0))
     humidity = float(data.get("kelembaban", 0.0))
-    pm10 = float(data.get("debu", 0.0))
+
+    # GP2Y1014AU0F Dust Sensor – Raw ADC to µg/m³ conversion
+    # Step 1: Convert raw ADC value (0–1023, 3.3 V reference) to voltage
+    #   Vout (V) = adc_raw * (3.3 / 1023.0)
+    # Step 2: Apply linear formula (Chris Nafis / Sharp datasheet approximation)
+    #   Dust Density (mg/m³)  = 0.17 * Vout - 0.1
+    #   Dust Density (µg/m³)  = (0.17 * Vout - 0.1) * 1000 = 170 * Vout - 100
+    # The clean-air baseline is ~0.6 V (~186 ADC). Results below 0 are clamped.
+    adc_raw = float(data.get("debu", 0.0))
+    v_out = adc_raw * (3.3 / 1023.0)           # Convert ADC → Voltage (V)
+    pm10 = max(0.0, (0.17 * v_out - 0.1) * 1000)  # Convert Voltage → µg/m³
+    pm10 = round(pm10, 2)
+
+
     co = float(data.get("gas_co_mq7", 0.0))
 
     waktu_str = data.get("waktu", "")

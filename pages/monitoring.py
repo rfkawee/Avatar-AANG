@@ -68,7 +68,17 @@ with c1:
 with c2:
     render_metric_card("PM10", reading.get("pm10", "-"), "µg/m³", "💨")
 with c3:
-    render_metric_card("CO", reading.get("co", "-"), "ppm", "🏭")
+    co_val = reading.get("co", "-")
+    if co_val in (1, 1.0, "1", "1.0"):
+        co_display = "Baik"
+        co_unit = ""
+    elif co_val in (0, 0.0, "0", "0.0"):
+        co_display = "Tidak Baik"
+        co_unit = ""
+    else:
+        co_display = co_val
+        co_unit = "ppm"
+    render_metric_card("CO", co_display, co_unit, "🏭")
 with c4:
     render_metric_card("Temperature", reading.get("temperature", "-"), "°C", "🌡️")
 

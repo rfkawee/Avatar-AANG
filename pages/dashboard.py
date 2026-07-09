@@ -79,10 +79,21 @@ with c2:
         icon="💨",
     )
 with c3:
+    co_val = reading.get("co", "-")
+    if co_val in (1, 1.0, "1", "1.0"):
+        co_display = "Baik"
+        co_unit = ""
+    elif co_val in (0, 0.0, "0", "0.0"):
+        co_display = "Tidak Baik"
+        co_unit = ""
+    else:
+        co_display = co_val
+        co_unit = "ppm"
+
     render_metric_card(
         title="CO",
-        value=reading.get("co", "-"),
-        unit="ppm",
+        value=co_display,
+        unit=co_unit,
         icon="🏭",
     )
 with c4:
