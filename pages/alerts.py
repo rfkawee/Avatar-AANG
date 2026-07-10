@@ -10,6 +10,10 @@ from components.sidebar import render_sidebar
 from components.cards import render_status_badge
 from components.tables import render_alert_table
 from utils.constants import ISPU_CATEGORIES
+from utils.helper import check_database_connection
+
+# ── Connection check ─────────────────────────────────────────────────────
+check_database_connection()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
 device_ids = get_all_device_ids()

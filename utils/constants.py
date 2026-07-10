@@ -102,7 +102,7 @@ ISPU_CATEGORIES = [
 # SENSOR DEFAULTS
 # ═══════════════════════════════════════════════════════════════════════════
 
-DEFAULT_DEVICE_IDS = ["AQM-001", "AQM-002"]
+DEFAULT_DEVICE_IDS = ["None"]
 
 # Sensor value ranges for mock data generation
 MOCK_RANGES = {

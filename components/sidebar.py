@@ -4,9 +4,11 @@ Renders the premium dark-themed sidebar with app branding,
 connection status, device selector, and refresh info.
 """
 import streamlit as st
+from datetime import timedelta
 from config.firebase_config import is_offline_mode
 from config.settings import APP_NAME, REFRESH_INTERVAL_SECONDS
 from utils.helper import now_wib, format_datetime
+from services.sensor_service import get_latest_reading
 
 
 def render_sidebar(device_ids: list, selected_device: str) -> str:
@@ -227,13 +229,27 @@ def render_sidebar(device_ids: list, selected_device: str) -> str:
     st.sidebar.markdown(brand_html, unsafe_allow_html=True)
 
     # ── Connection status badge ─────────────────────────────────────────
-    offline = is_offline_mode()
-    if offline:
+    is_offline = is_offline_mode()
+    if is_offline:
         badge_class = "offline"
         badge_text = "🟠 Offline Mode"
     else:
-        badge_class = "live"
-        badge_text = "🟢 Live Connected"
+        # Check if the latest data is outdated (more than 5 minutes old)
+        reading = get_latest_reading(selected_device) if selected_device else None
+        is_outdated = True
+        if reading:
+            data_ts = reading.get("timestamp")
+            if data_ts:
+                time_diff = now_wib() - data_ts
+                if time_diff <= timedelta(minutes=5):
+                    is_outdated = False
+        
+        if is_outdated:
+            badge_class = "offline"
+            badge_text = "🔴 Device Offline"
+        else:
+            badge_class = "live"
+            badge_text = "🟢 Live Connected"
 
     status_html = f"""
     <div style="text-align: center;">

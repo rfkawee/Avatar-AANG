@@ -10,7 +10,10 @@ from services.sensor_service import get_latest_reading, get_readings_dataframe, 
 from components.sidebar import render_sidebar
 from components.cards import render_metric_card, render_ispu_card
 from components.charts import create_line_chart
-from utils.helper import format_datetime, now_wib
+from utils.helper import format_datetime, now_wib, check_database_connection
+
+# ── Connection check ─────────────────────────────────────────────────────
+check_database_connection()
 
 # ── Auto-refresh ─────────────────────────────────────────────────────────
 st_autorefresh(
@@ -31,13 +34,13 @@ if reading is None:
     st.info("📭 No data available for this device yet. Check back soon or verify the device is sending data.")
     st.stop()
 
-# Check if data is outdated (older than 10 minutes)
+# Check if data is outdated (older than 5 minutes)
 from datetime import timedelta
 data_ts = reading.get("timestamp")
 is_outdated = False
 if data_ts:
     time_diff = now_wib() - data_ts
-    if time_diff > timedelta(minutes=10):
+    if time_diff > timedelta(minutes=5):
         is_outdated = True
 
 data_time_str = format_datetime(data_ts) if data_ts else "Unknown"

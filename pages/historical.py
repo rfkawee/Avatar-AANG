@@ -10,7 +10,10 @@ from services.sensor_service import get_readings_dataframe, get_all_device_ids
 from components.sidebar import render_sidebar
 from components.charts import create_line_chart
 from components.tables import render_data_table
-from utils.helper import now_wib
+from utils.helper import now_wib, check_database_connection
+
+# ── Connection check ─────────────────────────────────────────────────────
+check_database_connection()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
 device_ids = get_all_device_ids()

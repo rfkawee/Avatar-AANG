@@ -11,6 +11,10 @@ from components.sidebar import render_sidebar
 from components.cards import render_status_badge
 from config.settings import COLLECTION_DEVICES
 from config.firebase_config import is_offline_mode
+from utils.helper import check_database_connection
+
+# ── Connection check ─────────────────────────────────────────────────────
+check_database_connection()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
 device_ids = get_all_device_ids()

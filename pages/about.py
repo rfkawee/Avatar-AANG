@@ -164,7 +164,7 @@ st.markdown(
     - $I_{upper}, I_{lower}$ = ISPU breakpoint boundaries
     - $C_{upper}, C_{lower}$ = concentration breakpoint boundaries
 
-    The **final ISPU** is the **maximum** of all individual sub-indices.
+    The **final ISPU** is calculated from the PM10 sub-index.
 
     > *Reference: Keputusan Kepala Bapedal No. 107 Tahun 1997*
     """

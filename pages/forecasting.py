@@ -9,6 +9,10 @@ from services.sensor_service import get_all_device_ids
 from services.prediction_service import get_mock_prediction, is_model_available
 from components.sidebar import render_sidebar
 from components.charts import create_forecast_chart
+from utils.helper import check_database_connection
+
+# ── Connection check ─────────────────────────────────────────────────────
+check_database_connection()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────
 device_ids = get_all_device_ids()

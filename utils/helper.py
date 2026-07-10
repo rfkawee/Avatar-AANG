@@ -60,21 +60,21 @@ def calculate_ispu_co(co_ppm: float) -> float:
     return _calculate_ispu_for_pollutant(co_ppm, ISPU_CO_BREAKPOINTS)
 
 
-def calculate_ispu(pm10_ugm3: float, co_ppm: float) -> dict:
+def calculate_ispu(pm10_ugm3: float, co_ppm: Optional[float] = None) -> dict:
     """
-    Calculate the overall ISPU index from PM10 and CO readings.
-    The final ISPU is the maximum of the individual sub-indices.
+    Calculate the overall ISPU index from PM10 reading.
+    The final ISPU is determined by PM10 only, but CO can still be passed for sub-index tracking.
 
     Args:
         pm10_ugm3: PM10 concentration in µg/m³.
-        co_ppm: CO concentration in ppm.
+        co_ppm: Optional CO concentration in ppm.
 
     Returns:
         A dict with keys: ispu_pm10, ispu_co, ispu_final, category (dict).
     """
     ispu_pm10 = calculate_ispu_pm10(pm10_ugm3)
-    ispu_co = calculate_ispu_co(co_ppm)
-    ispu_final = max(ispu_pm10, ispu_co)
+    ispu_co = calculate_ispu_co(co_ppm) if co_ppm is not None else 0.0
+    ispu_final = ispu_pm10
     category = get_ispu_category(ispu_final)
 
     return {
@@ -158,3 +158,41 @@ def parse_firestore_timestamp(ts) -> Optional[datetime]:
         return datetime.fromisoformat(str(ts)).astimezone(WIB)
     except (ValueError, TypeError):
         return None
+
+
+def check_database_connection() -> bool:
+    """
+    Check if the app is connected to the Firebase Firestore database.
+    If it is running in offline mode, display a premium warning and stop execution.
+    """
+    from config.firebase_config import is_offline_mode
+    import streamlit as st
+
+    if is_offline_mode():
+        # Render the sidebar brand and offline badge manually to keep consistent style
+        from config.settings import APP_NAME
+        st.sidebar.markdown(f"""
+        <div class="sidebar-brand">
+            <span class="brand-icon">🌬️</span>
+            <p class="brand-name">{APP_NAME}</p>
+            <p class="brand-sub">IoT Air Quality Monitoring</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.sidebar.markdown("<div style='text-align: center;'><span class='conn-badge offline'><span class='pulse-dot'></span>🟠 Offline Mode</span></div>", unsafe_allow_html=True)
+        st.sidebar.markdown("---")
+
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 100px;">
+                <span style="font-size: 5rem;">🔌</span>
+                <h2 style="font-weight: 700; color: #ef4444; margin-top: 20px;">Tidak Terhubung ke Database</h2>
+                <p style="color: #8b949e; font-size: 1.1rem; max-width: 500px; margin: 10px auto;">
+                    Halaman ini memerlukan koneksi ke database Firebase Firestore.
+                    Aplikasi saat ini berjalan tanpa koneksi database. Harap periksa konfigurasi Firebase Anda pada file <code>.env</code>.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.stop()
+    return True

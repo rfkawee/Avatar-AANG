@@ -108,10 +108,10 @@ def get_mock_prediction(device_id: str) -> Dict[str, Any]:
         co_val = co_base + co_amp * math.sin(angle_co) + noise_co
         co_val = max(co_min, min(co_max, round(co_val, 2)))
 
-        # ISPU: derived from pm10 and co predictions
+        # ISPU: derived from pm10 predictions only
         ispu_pm10 = calculate_ispu_pm10(pm10_val)
         ispu_co = calculate_ispu_co(co_val)
-        ispu_val = round(max(ispu_pm10, ispu_co), 1)
+        ispu_val = round(ispu_pm10, 1)
 
         pm10_predicted.append(pm10_val)
         co_predicted.append(co_val)
