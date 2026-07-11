@@ -72,14 +72,22 @@ st.write("")
 # ── Add Device Form ──────────────────────────────────────────────────────
 st.markdown("### ➕ Add New Device")
 
+st.info(
+    "**💡 Cara Kerja (Workflow):**\n"
+    "1. Daftarkan **Device ID** unik di sini (misal: `ESP-32-Taman`).\n"
+    "2. Masukkan ID yang sama ke dalam *source code* hardware IoT milikmu.\n"
+    "3. Hardware akan mengirim data ke Firebase di path `kualitas_udara/{Device ID}/logs`.\n"
+    "4. Pilih device dari menu *sidebar* untuk mulai memantau datanya."
+)
+
 with st.form("add_device_form", clear_on_submit=True):
     col_id, col_name, col_loc = st.columns(3)
     with col_id:
-        new_device_id = st.text_input("Device ID", placeholder="e.g. AQM-003")
+        new_device_id = st.text_input("Device ID (Harus sama dengan di Hardware)", placeholder="contoh: ESP-32-Taman")
     with col_name:
-        new_device_name = st.text_input("Device Name", placeholder="e.g. Sensor Lab A")
+        new_device_name = st.text_input("Device Name", placeholder="contoh: Sensor Taman Kota")
     with col_loc:
-        new_device_location = st.text_input("Location", placeholder="e.g. Building A, Floor 2")
+        new_device_location = st.text_input("Location", placeholder="contoh: Jl. Sudirman")
 
     submitted = st.form_submit_button("➕ Register Device", type="primary")
 
