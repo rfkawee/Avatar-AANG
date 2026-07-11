@@ -97,6 +97,7 @@ with st.form("add_device_form", clear_on_submit=True):
                     "status": "active",
                 })
                 st.success(f"✅ Device **{new_device_id.strip()}** registered successfully!")
+                st.cache_data.clear()
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Failed to add device: {e}")
@@ -148,6 +149,7 @@ if devices:
                                 "status": edit_status,
                             })
                             st.success(f"✅ Device **{device_id}** updated.")
+                            st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Failed to update: {e}")
@@ -168,6 +170,7 @@ if devices:
                                     delete_document(COLLECTION_DEVICES, doc_id)
                                     st.success(f"🗑️ Device **{device_id}** deleted.")
                                     st.session_state.pop(f"confirm_delete_{doc_id}", None)
+                                    st.cache_data.clear()
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Failed to delete: {e}")

@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 import pandas as pd
+import streamlit as st
 
 from config.firebase_config import is_offline_mode
 from config.settings import COLLECTION_DEVICES
@@ -178,6 +179,7 @@ def _generate_mock_history(
 # PUBLIC API
 # ═══════════════════════════════════════════════════════════════════════════
 
+@st.cache_data(ttl=30)
 def get_latest_reading(device_id: str) -> Optional[Dict[str, Any]]:
     """Retrieve the latest sensor reading for a device from kualitas_udara/{device_id}/logs."""
     if is_offline_mode():
@@ -208,6 +210,7 @@ def get_latest_reading(device_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+@st.cache_data(ttl=60)
 def get_readings(
     device_id: str,
     start_date: Optional[datetime] = None,
@@ -276,6 +279,7 @@ def get_readings_dataframe(
     device_id: str,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    limit: int = MOCK_HISTORY_COUNT,
 ) -> pd.DataFrame:
     """Retrieve sensor readings as a pandas DataFrame."""
     try:
@@ -283,7 +287,7 @@ def get_readings_dataframe(
             device_id,
             start_date=start_date,
             end_date=end_date,
-            limit=MOCK_HISTORY_COUNT,
+            limit=limit,
         )
 
         if not readings:
@@ -306,6 +310,7 @@ def get_readings_dataframe(
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=300)
 def get_all_device_ids() -> List[str]:
     """Retrieve a list of all registered device IDs."""
     if is_offline_mode():

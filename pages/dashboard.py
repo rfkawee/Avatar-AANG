@@ -125,7 +125,7 @@ st.write("")
 # ── Quick Trend Charts (last 60 readings ≈ 1 hour) ──────────────────────
 st.markdown("### 📈 Last Hour Trend")
 
-df = get_readings_dataframe(selected_device)
+df = get_readings_dataframe(selected_device, limit=60)
 
 if df is not None and not df.empty:
     df_recent = df.tail(60).copy()

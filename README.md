@@ -7,9 +7,7 @@ AirSense is a premium, modern, and high-performance Web Dashboard built with **S
 ## ✨ Features
 
 - **📊 Modern Glassmorphic UI**: Vibrant, responsive, and state-of-the-art dark theme UI inspired by premium glassmorphism principles.
-- **📡 Real-Time Monitoring**: Auto-refreshing metrics showing live air quality parameters (PM10, CO, Temperature, Humidity).
 - **🌡️ ISPU Index Calculation**: Real-time ISPU (Indeks Standar Pencemar Udara) category computation with interactive meter bars and action recommendations.
-- **📈 Historical Data Explorer**: Time-range date filters to query and analyze historical readings, display statistical summaries, and export data directly to **CSV**.
 - **🔌 Online/Offline Status Indicator**: Automatically checks if a device is active. Shows a status warning if no data has been received within 10 minutes.
 - **🔧 Device Management**: Complete CRUD interface to add, edit, status-check, or remove registered IoT device nodes.
 - **🔮 Forecasting Placeholder**: Structure prepared for future machine learning time-series forecasting.
@@ -47,8 +45,6 @@ air_quality_monitoring/
 │
 ├── pages/                     # Individual page dashboards
 │   ├── dashboard.py           # Main KPI & status summary page
-│   ├── monitoring.py          # Real-time sensor trends (Last 2 hours)
-│   ├── historical.py          # Advanced search, statistics, and CSV download
 │   ├── forecasting.py         # Forecasting dashboard skeleton
 │   ├── alerts.py              # System notifications & air quality warnings
 │   ├── devices.py             # CRUD management for IoT devices
