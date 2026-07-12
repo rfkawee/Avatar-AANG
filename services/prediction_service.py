@@ -1,19 +1,139 @@
 """
 Prediction Service Module
-Placeholder for future ML-based air quality predictions.
-Currently provides a mock 24-hour forecast using sinusoidal patterns for
-demonstration and UI development purposes.
+Integrates the trained LSTM model for air quality forecasting.
+Supports autoregressive multi-step prediction using historical
+sensor data from Firebase Firestore.
 """
-import math
-import random
-from datetime import datetime, timedelta
+import os
+import numpy as np
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from utils.constants import MOCK_RANGES
-from utils.helper import calculate_ispu_pm10, calculate_ispu_co, now_wib, WIB
+from utils.helper import calculate_ispu_pm10, now_wib, WIB
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODEL & SCALER PATHS
+# ═══════════════════════════════════════════════════════════════════════════
+
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_MODEL_PATH = os.path.join(_BASE_DIR, "models", "model_lstm_kualitas_udara.keras")
+_SCALER_PATH = os.path.join(_BASE_DIR, "models", "scaler.pkl")
+
+# Feature order MUST match the training notebook exactly
+FEATURES = ["suhu", "kelembaban", "debu", "gas_mq7", "gas_mq135"]
+WINDOW_SIZE = 60  # Number of past timesteps required by the LSTM
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LAZY LOADING (loaded once, cached in module globals)
+# ═══════════════════════════════════════════════════════════════════════════
+
+_model = None
+_scaler = None
+
+
+def _load_model():
+    """Lazy-load the Keras model."""
+    global _model
+    if _model is None:
+        try:
+            import tensorflow as tf
+            _model = tf.keras.models.load_model(_MODEL_PATH)
+            logger.info("LSTM model loaded from: %s", _MODEL_PATH)
+        except Exception as e:
+            logger.error("Failed to load LSTM model: %s", e)
+            _model = None
+    return _model
+
+
+def _load_scaler():
+    """Lazy-load the MinMaxScaler."""
+    global _scaler
+    if _scaler is None:
+        try:
+            import joblib
+            _scaler = joblib.load(_SCALER_PATH)
+            logger.info("Scaler loaded from: %s", _SCALER_PATH)
+        except Exception as e:
+            logger.error("Failed to load scaler: %s", e)
+            _scaler = None
+    return _scaler
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RAW DATA FETCHER (bypasses sensor_service mapping)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _fetch_raw_readings(device_id: str, limit: int) -> List[Dict[str, Any]]:
+    """
+    Fetch raw sensor data directly from Firebase without ADC→µg/m³ conversion.
+    This is necessary because the LSTM model was trained on RAW ADC values
+    for the 'debu' column (e.g. 277, 285), not converted µg/m³ values.
+    """
+    from config.firebase_config import is_offline_mode
+    from services.firebase_service import query_collection
+
+    if is_offline_mode():
+        # In offline/mock mode, generate synthetic raw readings
+        import math
+        import random
+        current = now_wib()
+        readings = []
+        for i in range(limit):
+            ts = current - timedelta(minutes=(limit - 1 - i))
+            mins = ts.hour * 60 + ts.minute
+            readings.append({
+                "suhu": round(30 + 3 * math.sin(2 * math.pi * mins / 1440) + random.gauss(0, 0.3), 1),
+                "kelembaban": round(65 - 5 * math.sin(2 * math.pi * mins / 1440) + random.gauss(0, 0.5), 1),
+                "debu": round(280 + 10 * math.sin(2 * math.pi * mins / 720) + random.gauss(0, 2), 1),
+                "gas_mq7": float(random.choice([0, 1])),
+                "gas_mq135": float(random.choice([0, 1])),
+                "waktu": ts.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": ts,
+            })
+        return readings
+
+    try:
+        docs = query_collection(
+            f"kualitas_udara/{device_id}/logs",
+            field="waktu",
+            operator=">=",
+            value="",
+            order_by="waktu",
+            order_direction="DESCENDING",
+            limit=limit,
+        )
+
+        results = []
+        for raw in docs:
+            waktu_str = raw.get("waktu", "")
+            try:
+                ts = datetime.strptime(waktu_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=WIB)
+            except Exception:
+                doc_id = raw.get("id", "")
+                if isinstance(doc_id, str) and doc_id.isdigit():
+                    ts = datetime.fromtimestamp(int(doc_id), tz=timezone.utc).astimezone(WIB)
+                else:
+                    ts = now_wib()
+
+            results.append({
+                "suhu": float(raw.get("suhu", 0.0)),
+                "kelembaban": float(raw.get("kelembaban", 0.0)),
+                "debu": float(raw.get("debu", 0.0)),
+                "gas_mq7": float(raw.get("gas_mq7", raw.get("gas_co_mq7", 0.0))),
+                "gas_mq135": float(raw.get("gas_mq135", raw.get("mq135", 0.0))),
+                "waktu": waktu_str,
+                "timestamp": ts,
+            })
+
+        return results
+
+    except Exception as e:
+        logger.error("Error fetching raw readings for '%s': %s", device_id, e)
+        return []
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -22,110 +142,139 @@ logger = get_logger(__name__)
 
 def is_model_available() -> bool:
     """
-    Check whether a trained prediction model is available.
-
-    Returns:
-        False — no real model is integrated yet. This is a placeholder.
+    Check whether both the trained model and scaler files exist on disk.
     """
-    return False
+    return os.path.isfile(_MODEL_PATH) and os.path.isfile(_SCALER_PATH)
 
 
-def get_prediction(device_id: str) -> Optional[Dict[str, Any]]:
+def get_live_prediction(
+    device_id: str,
+    steps: int = 60,
+) -> Optional[Dict[str, Any]]:
     """
-    Generate a real prediction for the given device.
+    Generate a multi-step autoregressive forecast using the trained LSTM model.
 
-    This is a placeholder that always returns None until a trained model
-    (e.g. LSTM, Prophet, or ARIMA) is integrated.
+    Workflow:
+        1. Fetch the last WINDOW_SIZE (60) RAW readings from Firebase.
+        2. Scale the feature columns using the saved MinMaxScaler.
+        3. Predict 1 step ahead, append result, slide window, repeat for N steps.
+        4. Inverse-transform the predictions back to real-world units.
+        5. Calculate ISPU from predicted debu (raw ADC → µg/m³ conversion).
 
     Args:
-        device_id: The device identifier.
+        device_id: The device identifier to pull historical data from.
+        steps: Number of future timesteps to forecast (default 60).
 
     Returns:
-        None — no model available.
+        A dict with timestamps, predicted values per feature, and ISPU.
+        None if model/scaler are unavailable or data is insufficient.
     """
-    if not is_model_available():
-        logger.debug(
-            "No prediction model available for device '%s'. "
-            "Use get_mock_prediction() for simulated data.",
-            device_id,
+    model = _load_model()
+    scaler = _load_scaler()
+
+    if model is None or scaler is None:
+        logger.warning("Model or scaler not available — cannot generate prediction.")
+        return None
+
+    # ── 1. Fetch RAW historical data ─────────────────────────────────
+    raw_readings = _fetch_raw_readings(device_id, limit=WINDOW_SIZE + 10)
+
+    if not raw_readings or len(raw_readings) < WINDOW_SIZE:
+        logger.warning(
+            "Insufficient data for device '%s': got %d, need %d.",
+            device_id, len(raw_readings) if raw_readings else 0, WINDOW_SIZE,
         )
         return None
-    return None
 
+    # Sort by timestamp ascending (oldest first)
+    raw_readings.sort(key=lambda r: r["timestamp"])
 
-def get_mock_prediction(device_id: str) -> Dict[str, Any]:
-    """
-    Generate a simulated 24-hour forecast using sinusoidal patterns.
+    # Take the last WINDOW_SIZE readings
+    recent = raw_readings[-WINDOW_SIZE:]
 
-    The mock forecast produces hourly data points starting from the current
-    time. PM10 and CO values follow a diurnal cycle with two peaks (rush-hour
-    pattern), and ISPU is derived from those values.
+    # ── 2. Build feature matrix & scale ──────────────────────────────
+    raw_matrix = []
+    timestamps_history = []
+    history_debu_raw = []
 
-    Args:
-        device_id: The device identifier (used for labelling only).
+    for r in recent:
+        row = [
+            r["suhu"],
+            r["kelembaban"],
+            r["debu"],           # RAW ADC value (as used in training)
+            r["gas_mq7"],
+            r["gas_mq135"],
+        ]
+        raw_matrix.append(row)
+        timestamps_history.append(r["timestamp"])
+        history_debu_raw.append(r["debu"])
 
-    Returns:
-        A dict containing:
+    raw_arr = np.array(raw_matrix, dtype=np.float64)
+    scaled_arr = scaler.transform(raw_arr)
 
-        - ``device_id`` (str): The device identifier.
-        - ``generated_at`` (datetime): When the forecast was created.
-        - ``timestamps`` (list[datetime]): 24 hourly timestamps.
-        - ``pm10_predicted`` (list[float]): Predicted PM10 (µg/m³).
-        - ``co_predicted`` (list[float]): Predicted CO (ppm).
-        - ``ispu_predicted`` (list[float]): Predicted ISPU index values.
-    """
-    current = now_wib()
-    timestamps: List[datetime] = []
-    pm10_predicted: List[float] = []
-    co_predicted: List[float] = []
-    ispu_predicted: List[float] = []
+    # ── 3. Autoregressive prediction loop ────────────────────────────
+    window = scaled_arr.copy()  # shape: (WINDOW_SIZE, 5)
+    predictions_scaled = []
 
-    # Parameter ranges
-    pm_min, pm_max = MOCK_RANGES["pm10"]
-    co_min, co_max = MOCK_RANGES["co"]
+    for _ in range(steps):
+        input_seq = window.reshape(1, WINDOW_SIZE, len(FEATURES))
+        pred = model.predict(input_seq, verbose=0)[0]  # shape: (5,)
+        predictions_scaled.append(pred)
+        # Slide window: drop oldest, append prediction
+        window = np.vstack([window[1:], pred.reshape(1, -1)])
 
-    pm_base = (pm_min + pm_max) / 2 * 0.45
-    pm_amp = (pm_max - pm_min) / 2 * 0.35
-    co_base = (co_min + co_max) / 2 * 0.40
-    co_amp = (co_max - co_min) / 2 * 0.30
+    predictions_scaled = np.array(predictions_scaled)  # shape: (steps, 5)
 
-    for hour_offset in range(24):
-        ts = current + timedelta(hours=hour_offset)
-        timestamps.append(ts)
+    # ── 4. Inverse transform ─────────────────────────────────────────
+    predictions_real = scaler.inverse_transform(predictions_scaled)
 
-        # Minutes since midnight for this forecast hour
-        mins = ts.hour * 60 + ts.minute
+    # ── 5. Build output ──────────────────────────────────────────────
+    last_ts = timestamps_history[-1]
+    # Estimate interval between readings
+    if len(timestamps_history) >= 2:
+        avg_delta = (timestamps_history[-1] - timestamps_history[0]).total_seconds() / (len(timestamps_history) - 1)
+        interval = timedelta(seconds=max(avg_delta, 30))  # at least 30s
+    else:
+        interval = timedelta(minutes=1)
 
-        # PM10: 12-hour cycle (two peaks per day)
-        angle_pm = 2 * math.pi * mins / 720
-        noise_pm = random.gauss(0, pm_amp * 0.08)
-        pm10_val = pm_base + pm_amp * math.sin(angle_pm) + noise_pm
-        pm10_val = max(pm_min, min(pm_max, round(pm10_val, 1)))
+    forecast_timestamps = []
+    suhu_pred = []
+    kelembaban_pred = []
+    debu_pred = []
+    ispu_predicted = []
 
-        # CO: same rhythm, slightly phase-shifted
-        angle_co = 2 * math.pi * (mins + 30) / 720
-        noise_co = random.gauss(0, co_amp * 0.08)
-        co_val = co_base + co_amp * math.sin(angle_co) + noise_co
-        co_val = max(co_min, min(co_max, round(co_val, 2)))
+    for i in range(steps):
+        ts = last_ts + interval * (i + 1)
+        forecast_timestamps.append(ts)
 
-        # ISPU: derived from pm10 predictions only
-        ispu_pm10 = calculate_ispu_pm10(pm10_val)
-        ispu_co = calculate_ispu_co(co_val)
-        ispu_val = round(ispu_pm10, 1)
+        suhu_val = round(float(predictions_real[i, 0]), 1)
+        kelembaban_val = round(float(predictions_real[i, 1]), 1)
+        debu_val = round(float(predictions_real[i, 2]), 1)
 
-        pm10_predicted.append(pm10_val)
-        co_predicted.append(co_val)
+        # Convert raw ADC debu → µg/m³ for ISPU calculation
+        v_out = debu_val * (3.3 / 1023.0)
+        pm10_ugm3 = max(0.0, (0.17 * v_out - 0.1) * 1000)
+        pm10_ugm3 = round(pm10_ugm3, 2)
+
+        ispu_val = round(calculate_ispu_pm10(pm10_ugm3), 1)
+
+        suhu_pred.append(suhu_val)
+        kelembaban_pred.append(kelembaban_val)
+        debu_pred.append(debu_val)
         ispu_predicted.append(ispu_val)
 
-    logger.debug(
-        "[MOCK] Generated 24-hour forecast for device '%s'.", device_id
+    logger.info(
+        "Generated %d-step forecast for device '%s'.", steps, device_id
     )
 
     return {
         "device_id": device_id,
-        "generated_at": current,
-        "timestamps": timestamps,
-        "pm10_predicted": pm10_predicted,
-        "co_predicted": co_predicted,
+        "generated_at": now_wib(),
+        "timestamps": forecast_timestamps,
+        "suhu_predicted": suhu_pred,
+        "kelembaban_predicted": kelembaban_pred,
+        "debu_predicted": debu_pred,
         "ispu_predicted": ispu_predicted,
+        "history_timestamps": timestamps_history,
+        "history_debu": history_debu_raw,
     }
