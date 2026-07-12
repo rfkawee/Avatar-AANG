@@ -9,7 +9,7 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from utils.helper import calculate_ispu_pm10, now_wib, WIB
+from utils.helper import calculate_ispu_pm10, now_wib, WIB, convert_debu_adc_to_ugm3
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -252,9 +252,7 @@ def get_live_prediction(
         debu_val = round(float(predictions_real[i, 2]), 1)
 
         # Convert raw ADC debu → µg/m³ for ISPU calculation
-        v_out = debu_val * (3.3 / 1023.0)
-        pm10_ugm3 = max(0.0, (0.17 * v_out - 0.1) * 1000)
-        pm10_ugm3 = round(pm10_ugm3, 2)
+        pm10_ugm3 = convert_debu_adc_to_ugm3(debu_val)
 
         ispu_val = round(calculate_ispu_pm10(pm10_ugm3), 1)
 

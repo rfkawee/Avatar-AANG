@@ -319,3 +319,151 @@ def render_status_badge(text: str, color: str) -> None:
     ">{text}</span>
     """)
     st.markdown(badge_html.replace('\n', ' '), unsafe_allow_html=True)
+
+
+def render_forecast_summary_card(ispu_predictions: list, current_ispu: float) -> None:
+    """
+    Render a premium glassmorphic analysis and mitigation card based on forecasted ISPU values.
+
+    Args:
+        ispu_predictions: List of forecasted ISPU values.
+        current_ispu: The current actual ISPU index value.
+    """
+    if not ispu_predictions:
+        return
+
+    avg_ispu = sum(ispu_predictions) / len(ispu_predictions)
+    max_ispu = max(ispu_predictions)
+    min_ispu = min(ispu_predictions)
+
+    from utils.helper import get_ispu_category
+
+    # Determine trend compared to current ISPU
+    diff = avg_ispu - current_ispu
+    if diff > 5.0:
+        trend = "Menurun (Polusi Meningkat)"
+        trend_color = "#ef4444"  # red
+        trend_icon = "📈"
+    elif diff < -5.0:
+        trend = "Membaik (Polusi Menurun)"
+        trend_color = "#22c55e"  # green
+        trend_icon = "📉"
+    else:
+        trend = "Stabil (Relatif Konstan)"
+        trend_color = "#3b82f6"  # blue
+        trend_icon = "📊"
+
+    worst_category = get_ispu_category(max_ispu)
+    cat_color = worst_category.get("color", "#06b6d4")
+    cat_label = worst_category.get("label", "Sedang")
+    cat_emoji = worst_category.get("emoji", "🟢")
+
+    # Define custom mitigation guidelines based on the peak forecasted ISPU
+    if max_ispu <= 50:
+        mitigations = [
+            "Kualitas udara sangat baik. Aman untuk melakukan semua aktivitas fisik di luar ruangan.",
+            "Tutup pintu/jendela tidak diperlukan, ventilasi alami berjalan dengan aman.",
+            "Tidak perlu menggunakan masker saat bepergian."
+        ]
+    elif max_ispu <= 100:
+        mitigations = [
+            "Kualitas udara dalam kategori Sedang. Mayoritas orang aman beraktivitas di luar.",
+            "Bagi individu yang sangat sensitif (misal penderita asma), disarankan membatasi aktivitas fisik berat di luar ruangan.",
+            "Pantau kondisi berkala jika polusi udara dirasa mulai mengganggu pernapasan."
+        ]
+    elif max_ispu <= 200:
+        mitigations = [
+            "Kualitas udara Tidak Sehat. Kurangi aktivitas luar ruangan yang terlalu lama atau berat.",
+            "Gunakan masker standar (seperti N95 atau KF94) bila harus beraktivitas di luar ruangan.",
+            "Gunakan pembersih udara (air purifier) di dalam ruangan jika tersedia.",
+            "Kelompok sensitif sebaiknya tetap berada di dalam ruangan."
+        ]
+    elif max_ispu <= 300:
+        mitigations = [
+            "Kualitas udara Sangat Tidak Sehat. Hindari seluruh aktivitas luar ruangan.",
+            "Tutup semua jendela dan pintu rapat-rapat untuk menghindari kontaminasi udara luar.",
+            "Nyalakan pembersih udara (air purifier) di dalam rumah.",
+            "Gunakan masker respirator medis (N95/KF94) jika sangat terpaksa keluar ruangan."
+        ]
+    else:
+        mitigations = [
+            "Tingkat Kualitas Udara Berbahaya! Darurat kesehatan masyarakat.",
+            "Hindari aktivitas luar ruangan sama sekali, tetap tinggal di dalam rumah.",
+            "Pasang pembersih udara di dalam ruangan dan nyalakan filter udara jika ada.",
+            "Gunakan masker pelindung berspesifikasi tinggi jika harus keluar."
+        ]
+
+    mitigations_li = "".join([f"<li style='margin-bottom: 8px;'>{item}</li>" for item in mitigations])
+
+    card_html = f"""
+    <div style="
+        background: linear-gradient(135deg, {cat_color}18, rgba(17, 25, 40, 0.8));
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-left: 6px solid {cat_color};
+        border-radius: 20px;
+        padding: 28px;
+        margin-bottom: 24px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        color: #ffffff;
+    ">
+        <!-- Header/Title -->
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 24px;">🔮</span>
+                <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #ffffff;">Analisis & Mitigasi Kualitas Udara Kedepan</h3>
+            </div>
+            <div style="
+                background: {trend_color}20;
+                color: {trend_color};
+                border: 1px solid {trend_color}44;
+                padding: 6px 14px;
+                border-radius: 999px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            ">
+                <span>{trend_icon}</span>
+                <span>Tren: {trend}</span>
+            </div>
+        </div>
+        
+        <!-- Metrics Bar -->
+        <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 12px; flex: 1; min-width: 120px;">
+                <span style="font-size: 0.75rem; color: #9ca3af; display: block; text-transform: uppercase; margin-bottom: 4px;">Saat Ini</span>
+                <span style="font-size: 1.4rem; font-weight: 700; color: #ffffff;">{current_ispu:.1f}</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 12px; flex: 1; min-width: 120px;">
+                <span style="font-size: 0.75rem; color: #9ca3af; display: block; text-transform: uppercase; margin-bottom: 4px;">Prediksi Rata-rata</span>
+                <span style="font-size: 1.4rem; font-weight: 700; color: #ffffff;">{avg_ispu:.1f}</span>
+            </div>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px 16px; border-radius: 12px; flex: 1; min-width: 120px; border-left: 3px solid {cat_color};">
+                <span style="font-size: 0.75rem; color: #9ca3af; display: block; text-transform: uppercase; margin-bottom: 4px;">Prediksi Puncak</span>
+                <span style="font-size: 1.4rem; font-weight: 700; color: {cat_color};">{max_ispu:.1f}</span>
+            </div>
+        </div>
+        
+        <!-- Summary & Mitigations -->
+        <div>
+            <p style="margin: 0 0 16px 0; font-size: 0.95rem; line-height: 1.6; color: #e5e7eb;">
+                Dalam 1 jam ke depan, indeks ISPU diprediksi berkisar antara 
+                <b style="color: #ffffff;">{min_ispu:.1f}</b> hingga <b style="color: #ffffff;">{max_ispu:.1f}</b>. 
+                Puncak polusi diprediksi mencapai kategori <span style="color: {cat_color}; font-weight: 700;">{cat_emoji} {cat_label}</span>.
+            </p>
+            
+            <h4 style="margin: 20px 0 10px 0; font-size: 0.95rem; font-weight: 600; color: {cat_color}; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;">
+                <span>🛡️</span> Rekomendasi Tindakan & Mitigasi:
+            </h4>
+            
+            <ul style="margin: 0; padding-left: 20px; font-size: 0.9rem; line-height: 1.6; color: #d1d5db;">
+                {mitigations_li}
+            </ul>
+        </div>
+    </div>
+    """
+    st.markdown(card_html.replace('\n', ' '), unsafe_allow_html=True)
+

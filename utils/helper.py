@@ -85,6 +85,19 @@ def calculate_ispu(pm10_ugm3: float, co_ppm: Optional[float] = None) -> dict:
     }
 
 
+def convert_debu_adc_to_ugm3(adc_raw: float) -> float:
+    """
+    Convert raw ADC value of dust sensor GP2Y1014AU0F to PM10 concentration (µg/m³).
+    Step 1: Convert raw ADC value (0–1023, 3.3 V reference) to voltage:
+      Vout (V) = adc_raw * (3.3 / 1023.0)
+    Step 2: Apply linear formula:
+      Dust Density (µg/m³) = (0.17 * Vout - 0.1) * 1000
+    """
+    v_out = float(adc_raw) * (3.3 / 1023.0)
+    pm10 = max(0.0, (0.17 * v_out - 0.1) * 1000)
+    return round(pm10, 2)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # CATEGORY LOOKUP
 # ═══════════════════════════════════════════════════════════════════════════

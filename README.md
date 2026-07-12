@@ -10,7 +10,7 @@ AirSense is a premium, modern, and high-performance Web Dashboard built with **S
 - **🌡️ ISPU Index Calculation**: Real-time ISPU (Indeks Standar Pencemar Udara) category computation with interactive meter bars and action recommendations.
 - **🔌 Online/Offline Status Indicator**: Automatically checks if a device is active. Shows a status warning if no data has been received within 10 minutes.
 - **🔧 Device Management**: Complete CRUD interface to add, edit, status-check, or remove registered IoT device nodes.
-- **🔮 Forecasting Placeholder**: Structure prepared for future machine learning time-series forecasting.
+- **🔮 Time-Series ML Forecasting**: Real-time 1-hour air quality predictions using a trained LSTM (Long Short-Term Memory) neural network, complete with premium glassmorphism trend analysis and custom health mitigation recommendation cards.
 
 ---
 
@@ -20,6 +20,7 @@ AirSense is a premium, modern, and high-performance Web Dashboard built with **S
 - **Charts & Data Visualization**: [Plotly](https://plotly.com/) (v5.18.0+)
 - **Data Engineering**: [Pandas](https://pandas.pydata.org/) & [NumPy](https://numpy.org/)
 - **Backend Database**: [Firebase Firestore REST API](https://firebase.google.com/)
+- **Machine Learning**: [TensorFlow](https://www.tensorflow.org/) (v2.16.0+) & [Scikit-Learn](https://scikit-learn.org/) (MinMaxScaler)
 - **Styling**: Vanilla CSS with modern font styling ('Inter' via Google Fonts).
 
 ---
@@ -34,8 +35,8 @@ air_quality_monitoring/
 ├── .env.example               # Template file for environment variables
 │
 ├── components/                # Modular reusable UI components
-│   ├── cards.py               # Glassmorphic KPI cards & ISPU card renders
-│   ├── charts.py              # Interactive Plotly line charts
+│   ├── cards.py               # Glassmorphic KPI cards, ISPU card, and forecast analysis renders
+│   ├── charts.py              # Interactive Plotly line & forecast charts
 │   ├── sidebar.py             # Shared device selector and sidebar content
 │   └── tables.py              # Premium tables for raw data visualization
 │
@@ -43,9 +44,13 @@ air_quality_monitoring/
 │   ├── settings.py            # Constant strings, Collection Names, and UI thresholds
 │   └── firebase_config.py     # REST API credentials loader & mock mode checker
 │
+├── models/                    # Trained Machine Learning models
+│   ├── model_lstm_kualitas_udara.keras # Trained LSTM model for time-series forecasting
+│   └── scaler.pkl             # MinMaxScaler object for feature scaling
+│
 ├── pages/                     # Individual page dashboards
 │   ├── dashboard.py           # Main KPI & status summary page
-│   ├── forecasting.py         # Forecasting dashboard skeleton
+│   ├── forecasting.py         # LSTM air quality forecasting dashboard page
 │   ├── alerts.py              # System notifications & air quality warnings
 │   ├── devices.py             # CRUD management for IoT devices
 │   └── about.py               # Documentation and project info
@@ -53,10 +58,13 @@ air_quality_monitoring/
 ├── services/                  # Business logic & APIs
 │   ├── firebase_service.py    # Direct Firestore REST requests & mock implementations
 │   ├── sensor_service.py      # Calculations, sorting logic, and data mappings
-│   └── alert_service.py       # Exceeded-threshold checking algorithms
+│   ├── alert_service.py       # Exceeded-threshold checking algorithms
+│   └── prediction_service.py  # Autoregressive multi-step prediction using LSTM
 │
 └── utils/                     # Utility and helper functions
-    └── helper.py              # Date formatting & WIB timezone setup
+    ├── helper.py              # Date/time formatting, ISPU category lookup, and conversion functions
+    ├── constants.py           # ISPU breakpoints and category thresholds
+    └── logger.py              # Customized logger configuration
 ```
 
 ---

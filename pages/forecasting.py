@@ -9,7 +9,8 @@ from services.sensor_service import get_all_device_ids
 from services.prediction_service import get_live_prediction, is_model_available, WINDOW_SIZE
 from components.sidebar import render_sidebar
 from components.charts import create_forecast_chart
-from utils.helper import check_database_connection
+from utils.helper import check_database_connection, convert_debu_adc_to_ugm3, calculate_ispu_pm10
+from components.cards import render_forecast_summary_card
 
 # ── Connection check ─────────────────────────────────────────────────────
 check_database_connection()
@@ -66,140 +67,102 @@ st.markdown(
 
 st.write("")
 
-# ── Forecast Controls ────────────────────────────────────────────────────
+# ── Forecast Calculation ──────────────────────────────────────────────────
 if model_available:
-    st.markdown("### ⚙️ Pengaturan Prediksi")
+    with st.spinner("⏳ Memuat model dan menghasilkan prediksi..."):
+        prediction = get_live_prediction(selected_device, steps=60)
 
-    col_steps, col_btn = st.columns([2, 1])
-    with col_steps:
-        forecast_steps = st.slider(
-            "Jumlah langkah prediksi ke depan",
-            min_value=10,
-            max_value=120,
-            value=60,
-            step=10,
-            help=f"Model membutuhkan minimal {WINDOW_SIZE} data historis. "
-                 f"Setiap langkah merepresentasikan 1 interval waktu dari data sensor.",
+    if prediction is None:
+        st.error(
+            f"⚠️ Tidak dapat menghasilkan prediksi untuk device **{selected_device}**. "
+            f"Pastikan terdapat minimal **{WINDOW_SIZE} data** historis di database."
         )
-    with col_btn:
-        st.write("")  # spacer
-        generate_btn = st.button(
-            "🔮 Generate Forecast",
-            type="primary",
-            use_container_width=True,
+        st.stop()
+
+    st.markdown("---")
+    st.markdown("### 📈 Hasil Prediksi (1 Jam ke Depan)")
+
+    timestamps = prediction["timestamps"]
+    suhu_pred = prediction["suhu_predicted"]
+    kelembaban_pred = prediction["kelembaban_predicted"]
+    debu_pred_raw = prediction["debu_predicted"]
+    ispu_pred = prediction["ispu_predicted"]
+
+    # Convert PM10 raw ADC to µg/m³
+    debu_pred = [convert_debu_adc_to_ugm3(val) for val in debu_pred_raw]
+
+    # Build combined actual + predicted arrays for the forecast chart
+    hist_ts = prediction.get("history_timestamps", [])
+    hist_debu_raw = prediction.get("history_debu", [])
+    hist_debu = [convert_debu_adc_to_ugm3(val) for val in hist_debu_raw]
+
+    # Combined timeline for debu/ISPU chart
+    all_timestamps = list(hist_ts) + list(timestamps)
+    # Actual values: historical data + NaN for future
+    actual_debu = list(hist_debu) + [float("nan")] * len(timestamps)
+    # Predicted values: NaN for past + predicted for future
+    pred_debu_full = [float("nan")] * len(hist_ts) + list(debu_pred)
+
+    # Calculate historical ISPU
+    hist_ispu = [round(calculate_ispu_pm10(val), 1) for val in hist_debu]
+    current_ispu = hist_ispu[-1] if hist_ispu else 0.0
+
+    # Display analysis & mitigation summary card
+    render_forecast_summary_card(ispu_pred, current_ispu)
+
+    # ── Forecast Charts ──────────────────────────────────────────
+    tab_debu, tab_suhu, tab_kelembaban, tab_ispu = st.tabs(
+        ["PM10 (µg/m³)", "Suhu", "Kelembaban", "ISPU"]
+    )
+
+    with tab_debu:
+        fig = create_forecast_chart(
+            timestamps=all_timestamps,
+            actual_values=actual_debu,
+            predicted_values=pred_debu_full,
+            title="Prediksi PM10 (µg/m³)",
         )
+        st.plotly_chart(fig, use_container_width=True)
 
-    if generate_btn:
-        with st.spinner("⏳ Memuat model dan menghasilkan prediksi..."):
-            prediction = get_live_prediction(selected_device, steps=forecast_steps)
-
-        if prediction is None:
-            st.error(
-                f"⚠️ Tidak dapat menghasilkan prediksi untuk device **{selected_device}**. "
-                f"Pastikan terdapat minimal **{WINDOW_SIZE} data** historis di database."
-            )
-            st.stop()
-
-        # ── Store prediction in session state ────────────────────────
-        st.session_state["forecast_result"] = prediction
-
-    # ── Display results if available ─────────────────────────────────
-    prediction = st.session_state.get("forecast_result")
-
-    if prediction and prediction.get("device_id") == selected_device:
-        st.markdown("---")
-        st.markdown("### 📈 Hasil Prediksi")
-
-        timestamps = prediction["timestamps"]
-        suhu_pred = prediction["suhu_predicted"]
-        kelembaban_pred = prediction["kelembaban_predicted"]
-        debu_pred = prediction["debu_predicted"]
-        ispu_pred = prediction["ispu_predicted"]
-
-        # Build combined actual + predicted arrays for the forecast chart
-        hist_ts = prediction.get("history_timestamps", [])
-        hist_debu = prediction.get("history_debu", [])
-
-        # Combined timeline for debu/ISPU chart
-        all_timestamps = list(hist_ts) + list(timestamps)
-        # Actual values: historical data + NaN for future
-        actual_debu = list(hist_debu) + [float("nan")] * len(timestamps)
-        # Predicted values: NaN for past + predicted for future
-        pred_debu_full = [float("nan")] * len(hist_ts) + list(debu_pred)
-
-        # ── Forecast Charts ──────────────────────────────────────────
-        tab_debu, tab_suhu, tab_kelembaban, tab_ispu = st.tabs(
-            ["Debu (PM10 Raw)", "Suhu", "Kelembaban", "ISPU"]
+    with tab_suhu:
+        fig = create_forecast_chart(
+            timestamps=timestamps,
+            actual_values=[float("nan")] * len(timestamps),
+            predicted_values=suhu_pred,
+            title="Prediksi Suhu (°C)",
         )
+        st.plotly_chart(fig, use_container_width=True)
 
-        with tab_debu:
-            fig = create_forecast_chart(
-                timestamps=all_timestamps,
-                actual_values=actual_debu,
-                predicted_values=pred_debu_full,
-                title="Prediksi Debu / PM10 (Raw ADC)",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with tab_suhu:
-            fig = create_forecast_chart(
-                timestamps=timestamps,
-                actual_values=[float("nan")] * len(timestamps),
-                predicted_values=suhu_pred,
-                title="Prediksi Suhu (°C)",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with tab_kelembaban:
-            fig = create_forecast_chart(
-                timestamps=timestamps,
-                actual_values=[float("nan")] * len(timestamps),
-                predicted_values=kelembaban_pred,
-                title="Prediksi Kelembaban (%)",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with tab_ispu:
-            # ISPU combined chart
-            from utils.helper import calculate_ispu_pm10
-            hist_ispu = []
-            for val in hist_debu:
-                v_out = val * (3.3 / 1023.0)
-                pm10_ugm3 = max(0.0, (0.17 * v_out - 0.1) * 1000)
-                hist_ispu.append(round(calculate_ispu_pm10(pm10_ugm3), 1))
-
-            actual_ispu = list(hist_ispu) + [float("nan")] * len(timestamps)
-            pred_ispu_full = [float("nan")] * len(hist_ts) + list(ispu_pred)
-
-            fig = create_forecast_chart(
-                timestamps=all_timestamps,
-                actual_values=actual_ispu,
-                predicted_values=pred_ispu_full,
-                title="Prediksi ISPU (dari PM10)",
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        st.write("")
-
-        # ── Summary Table ────────────────────────────────────────────
-        st.markdown("### 📋 Tabel Ringkasan Prediksi")
-
-        summary_df = pd.DataFrame({
-            "Waktu": timestamps,
-            "Suhu (°C)": suhu_pred,
-            "Kelembaban (%)": kelembaban_pred,
-            "Debu (Raw)": debu_pred,
-            "ISPU": ispu_pred,
-        })
-        st.dataframe(summary_df, use_container_width=True, hide_index=True)
-
-        # ── Info note ────────────────────────────────────────────────
-        st.info(
-            "**ℹ️ Catatan:** Prediksi dihasilkan secara **autoregresif** — "
-            "model memprediksi 1 langkah ke depan, lalu menggunakan hasil prediksi "
-            "tersebut sebagai input untuk langkah berikutnya. Semakin jauh prediksi "
-            "ke depan, semakin besar kemungkinan terjadi deviasi dari nilai aktual."
+    with tab_kelembaban:
+        fig = create_forecast_chart(
+            timestamps=timestamps,
+            actual_values=[float("nan")] * len(timestamps),
+            predicted_values=kelembaban_pred,
+            title="Prediksi Kelembaban (%)",
         )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with tab_ispu:
+        # ISPU combined chart
+        actual_ispu = list(hist_ispu) + [float("nan")] * len(timestamps)
+        pred_ispu_full = [float("nan")] * len(hist_ts) + list(ispu_pred)
+
+        fig = create_forecast_chart(
+            timestamps=all_timestamps,
+            actual_values=actual_ispu,
+            predicted_values=pred_ispu_full,
+            title="Prediksi ISPU (dari PM10)",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.write("")
+    # ── Info note ────────────────────────────────────────────────
+    st.info(
+        "**ℹ️ Catatan:** Prediksi dihasilkan secara **autoregresif** — "
+        "model memprediksi 1 langkah ke depan, lalu menggunakan hasil prediksi "
+        "tersebut sebagai input untuk langkah berikutnya. Semakin jauh prediksi "
+        "ke depan, semakin besar kemungkinan terjadi deviasi dari nilai aktual."
+    )
 
 else:
     st.markdown(
