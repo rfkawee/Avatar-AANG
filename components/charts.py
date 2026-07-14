@@ -133,6 +133,7 @@ def create_line_chart(
                 ),
                 fill="tozeroy" if i == 0 else "tonexty",
                 fillcolor=_hex_to_rgba(color, 0.07),
+                connectgaps=True,   # bridge over missing data gaps (upload failures)
                 hovertemplate=(
                     f"<b>{display_name}</b>: %{{y:.1f}}<extra></extra>"
                 ),

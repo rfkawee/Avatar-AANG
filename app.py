@@ -174,7 +174,6 @@ pg = st.navigation(
         st.Page("pages/dashboard.py",    title="Dashboard",             icon="📊", default=True),
         st.Page("pages/forecasting.py",  title="Forecasting",           icon="🔮"),
         st.Page("pages/alerts.py",       title="Alerts",                icon="🚨"),
-        st.Page("pages/devices.py",      title="Devices",               icon="🔧"),
         st.Page("pages/about.py",        title="About",                 icon="ℹ️"),
     ]
 )

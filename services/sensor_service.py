@@ -25,6 +25,10 @@ from utils.helper import (
     parse_firestore_timestamp,
     WIB,
     convert_debu_adc_to_ugm3,
+    convert_mq7_adc_to_co_ppm,
+    convert_mq135_adc_to_co2_ppm,
+    is_outlier_reading,
+    filter_outlier_readings,
 )
 from utils.logger import get_logger
 
@@ -39,21 +43,27 @@ def _map_esp_reading(data: Dict[str, Any], device_id: str) -> Dict[str, Any]:
     """
     Map ESP8266 Indonesian Firestore fields to the dashboard's standard fields.
     ESP8266 Fields:
-      - suhu -> temperature
-      - kelembaban -> humidity
-      - debu -> pm10
-      - gas_co_mq7 -> co
-      - waktu -> timestamp (parsed string)
+      - suhu        -> temperature
+      - kelembaban  -> humidity
+      - debu        -> pm10  (raw ADC → µg/m³ via GP2Y1014AU0F formula)
+      - gas_co_mq7  -> co    (raw ADC → CO ppm via MQ7 power-law)
+      - gas_mq135   -> co2   (raw ADC → CO2 ppm via MQ135 power-law)
+      - waktu       -> timestamp (parsed string)
     """
     temperature = float(data.get("suhu", 0.0))
-    humidity = float(data.get("kelembaban", 0.0))
+    humidity    = float(data.get("kelembaban", 0.0))
 
     # GP2Y1014AU0F Dust Sensor – Raw ADC to µg/m³ conversion
     adc_raw = float(data.get("debu", 0.0))
-    pm10 = convert_debu_adc_to_ugm3(adc_raw)
+    pm10    = convert_debu_adc_to_ugm3(adc_raw)
 
+    # MQ7 – Raw ADC to CO ppm conversion
+    mq7_raw = float(data.get("gas_co_mq7", 0.0))
+    co      = convert_mq7_adc_to_co_ppm(mq7_raw)
 
-    co = float(data.get("gas_co_mq7", 0.0))
+    # MQ135 – Raw ADC to CO2-equivalent ppm conversion
+    mq135_raw = float(data.get("gas_mq135", 0.0))
+    co2       = convert_mq135_adc_to_co2_ppm(mq135_raw)
 
     waktu_str = data.get("waktu", "")
     try:
@@ -66,17 +76,20 @@ def _map_esp_reading(data: Dict[str, Any], device_id: str) -> Dict[str, Any]:
         else:
             ts = now_wib()
 
-    # Calculate ISPU
-    ispu_result = calculate_ispu(pm10, co)
+    # Calculate ISPU using all three pollutants
+    ispu_result = calculate_ispu(pm10, co, co2)
 
     return {
-        "id": data.get("id"),
-        "device_id": device_id,
-        "timestamp": ts,
+        "id":          data.get("id"),
+        "device_id":   device_id,
+        "timestamp":   ts,
         "temperature": temperature,
-        "humidity": humidity,
-        "pm10": pm10,
-        "co": co,
+        "humidity":    humidity,
+        "pm10":        pm10,
+        "co":          co,
+        "co2":         co2,
+        "mq7_raw":     mq7_raw,
+        "mq135_raw":   mq135_raw,
         **ispu_result,
     }
 
@@ -138,16 +151,26 @@ def _generate_mock_reading(device_id: str, timestamp: datetime) -> Dict[str, Any
     )
     co = max(co_min, min(co_max, round(co, 2)))
 
-    # ISPU
-    ispu_result = calculate_ispu(pm10, co)
+    # CO2 (MQ135): elevated in morning/evening (enclosed space activity)
+    co2_min, co2_max = MOCK_RANGES["co2"]
+    co2_base = (co2_min + co2_max) / 2
+    co2_amp  = (co2_max - co2_min) / 2 * 0.5
+    co2 = _sinusoidal_value(
+        co2_base, co2_amp, 720, minutes_since_midnight + 60, noise_pct=0.10
+    )
+    co2 = max(co2_min, min(co2_max, round(co2, 1)))
+
+    # ISPU — now uses all three pollutants
+    ispu_result = calculate_ispu(pm10, co, co2)
 
     return {
-        "device_id": device_id,
-        "timestamp": timestamp,
+        "device_id":   device_id,
+        "timestamp":   timestamp,
         "temperature": temperature,
-        "humidity": humidity,
-        "pm10": pm10,
-        "co": co,
+        "humidity":    humidity,
+        "pm10":        pm10,
+        "co":          co,
+        "co2":         co2,
         **ispu_result,
     }
 
@@ -174,14 +197,18 @@ def _generate_mock_history(
 
 @st.cache_data(ttl=30)
 def get_latest_reading(device_id: str) -> Optional[Dict[str, Any]]:
-    """Retrieve the latest sensor reading for a device from kualitas_udara/{device_id}/logs."""
+    """
+    Retrieve the latest VALID (non-outlier) sensor reading for a device.
+    Fetches up to 5 recent documents and returns the first one that passes
+    the outlier check, so a transient DHT22 error does not corrupt the display.
+    """
     if is_offline_mode():
         reading = _generate_mock_reading(device_id, now_wib())
         logger.debug("[MOCK] Generated latest reading for '%s'.", device_id)
         return reading
 
     try:
-        # Fetch the latest log document by sorting by 'waktu' descending
+        # Fetch several recent documents so we can skip outliers
         docs = query_collection(
             f"kualitas_udara/{device_id}/logs",
             field="waktu",
@@ -189,14 +216,30 @@ def get_latest_reading(device_id: str) -> Optional[Dict[str, Any]]:
             value="",
             order_by="waktu",
             order_direction="DESCENDING",
-            limit=1
+            limit=5
         )
 
-        if docs:
-            return _map_esp_reading(docs[0], device_id)
+        if not docs:
+            logger.warning("No readings found for device '%s'.", device_id)
+            return None
 
-        logger.warning("No readings found for device '%s' in Firestore subcollection.", device_id)
-        return None
+        prev = None
+        for doc in docs:
+            reading = _map_esp_reading(doc, device_id)
+            if not is_outlier_reading(reading, prev):
+                return reading   # first valid reading wins
+            logger.debug(
+                "[OUTLIER] Skipped latest doc '%s' for device '%s'.",
+                doc.get("id"), device_id,
+            )
+            prev = reading
+
+        # All 5 are outliers — return the most recent one anyway rather than None
+        logger.warning(
+            "All recent readings for '%s' flagged as outliers; returning most recent.",
+            device_id,
+        )
+        return _map_esp_reading(docs[0], device_id)
 
     except Exception as e:
         logger.error("Error fetching latest reading for '%s': %s", device_id, e)
@@ -261,7 +304,18 @@ def get_readings(
                 if len(results) >= limit:
                     break
 
-        return results
+        # Sort ascending before outlier filter (filter needs chronological order)
+        results.sort(key=lambda r: r["timestamp"])
+
+        # Remove outlier readings caused by sensor errors (e.g. DHT22 failures)
+        clean_results, removed = filter_outlier_readings(results)
+        if removed:
+            logger.info(
+                "[OUTLIER] Removed %d/%d readings for device '%s' (sensor error).",
+                removed, len(results), device_id,
+            )
+
+        return clean_results
 
     except Exception as e:
         logger.error("Error fetching readings for '%s': %s", device_id, e)

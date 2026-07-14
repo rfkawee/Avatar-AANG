@@ -89,8 +89,8 @@ def _fetch_raw_readings(device_id: str, limit: int) -> List[Dict[str, Any]]:
                 "suhu": round(30 + 3 * math.sin(2 * math.pi * mins / 1440) + random.gauss(0, 0.3), 1),
                 "kelembaban": round(65 - 5 * math.sin(2 * math.pi * mins / 1440) + random.gauss(0, 0.5), 1),
                 "debu": round(280 + 10 * math.sin(2 * math.pi * mins / 720) + random.gauss(0, 2), 1),
-                "gas_mq7": float(random.choice([0, 1])),
-                "gas_mq135": float(random.choice([0, 1])),
+                "gas_mq7":    round(random.uniform(150, 500), 1),   # realistic ADC (CO sensor)
+                "gas_mq135":  round(random.uniform(250, 650), 1),   # realistic ADC (CO2/gas sensor)
                 "waktu": ts.strftime("%Y-%m-%d %H:%M:%S"),
                 "timestamp": ts,
             })

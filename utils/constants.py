@@ -31,6 +31,18 @@ ISPU_CO_BREAKPOINTS = [
     (401, 500,   40.3,  50.2),
 ]
 
+# MQ135 CO2-equivalent breakpoints (ppm) — custom air quality thresholds
+# Based on WHO/ASHRAE indoor air quality standards for CO2
+# Note: MQ135 output is converted to CO2-equivalent ppm before lookup
+ISPU_MQ135_BREAKPOINTS = [
+    (0,   50,    400,    600),    #  0– 50 ISPU: 400–600 ppm   (Udara luar / sangat bersih)
+    (51,  100,   601,    1000),   # 51–100 ISPU: 601–1000 ppm  (Udara dalam ruangan baik)
+    (101, 200,   1001,   2000),   #101–200 ISPU: 1001–2000 ppm (Kualitas sedang–buruk)
+    (201, 300,   2001,   5000),   #201–300 ISPU: 2001–5000 ppm (Tidak sehat)
+    (301, 400,   5001,   10000),  #301–400 ISPU: 5001–10000 ppm (Sangat tidak sehat)
+    (401, 500,   10001,  40000),  #401–500 ISPU: >10000 ppm    (Berbahaya — zona narkosis CO2)
+]
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ISPU CATEGORIES
 # ═══════════════════════════════════════════════════════════════════════════
@@ -110,6 +122,7 @@ MOCK_RANGES = {
     "humidity":    (30.0, 90.0),
     "pm10":        (5.0, 300.0),
     "co":          (0.5, 30.0),
+    "co2":         (400.0, 2000.0),   # CO2 equivalent ppm (MQ135)
 }
 
 # Number of historical records to generate in mock mode (per device)
@@ -117,3 +130,18 @@ MOCK_HISTORY_COUNT = 1440   # 24 hours × 60 readings/hour
 
 # Alert-worthy ISPU threshold (alerts generated at this level and above)
 ALERT_ISPU_THRESHOLD = 101  # "Tidak Sehat" and above
+
+# ═══════════════════════════════════════════════════════════════════════════
+# OUTLIER DETECTION THRESHOLDS  (outdoor environment — Indonesia)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Absolute physical bounds for outdoor sensors in Indonesia
+OUTLIER_TEMP_MIN: float = 10.0    # °C — highlands (e.g. Dieng) can reach this
+OUTLIER_TEMP_MAX: float = 45.0    # °C — extreme heat in dry lowland areas
+OUTLIER_HUM_MIN:  float = 20.0    # %  — very dry / desert-like conditions
+OUTLIER_HUM_MAX:  float = 100.0   # %  — saturated (rain / fog)
+
+# Maximum plausible change between two consecutive 1-minute readings
+# Outdoor environments can change faster than indoor, so we allow larger deltas
+OUTLIER_MAX_TEMP_DELTA: float = 8.0    # °C  per reading-interval
+OUTLIER_MAX_HUM_DELTA:  float = 25.0   # %   per reading-interval
