@@ -12,7 +12,7 @@ from components.sidebar import render_sidebar
 from components.charts import create_forecast_chart
 from components.tables import render_alert_table
 from utils.constants import ISPU_CATEGORIES
-from utils.helper import check_database_connection, convert_debu_adc_to_ugm3, calculate_ispu_pm10
+from utils.helper import check_database_connection, convert_debu_adc_to_ugm3, calculate_ispu_pm10, convert_mq7_adc_to_co_ppm, convert_mq135_adc_to_co2_ppm, calculate_ispu
 from components.cards import render_forecast_summary_card, render_status_badge
 
 # ── Connection check ─────────────────────────────────────────────────────
@@ -72,33 +72,69 @@ if model_available:
         suhu_pred = prediction["suhu_predicted"]
         kelembaban_pred = prediction["kelembaban_predicted"]
         debu_pred_raw = prediction["debu_predicted"]
+        mq7_pred_raw = prediction["gas_mq7_predicted"]
+        mq135_pred_raw = prediction["gas_mq135_predicted"]
         ispu_pred = prediction["ispu_predicted"]
 
-        # Convert PM10 raw ADC to µg/m³
+        # Convert raw ADC values to physical units
         debu_pred = [convert_debu_adc_to_ugm3(val) for val in debu_pred_raw]
+        mq7_pred = [convert_mq7_adc_to_co_ppm(val) for val in mq7_pred_raw]
+        mq135_pred = [convert_mq135_adc_to_co2_ppm(val) for val in mq135_pred_raw]
 
-        # Build combined actual + predicted arrays for the forecast chart
+        # Build combined actual + predicted arrays for forecast charts
         hist_ts = prediction.get("history_timestamps", [])
         hist_debu_raw = prediction.get("history_debu", [])
         hist_debu = [convert_debu_adc_to_ugm3(val) for val in hist_debu_raw]
 
-        # Combined timeline for debu/ISPU chart
+        hist_mq7_raw = prediction.get("history_mq7", [])
+        hist_mq7 = [convert_mq7_adc_to_co_ppm(val) for val in hist_mq7_raw]
+
+        hist_mq135_raw = prediction.get("history_mq135", [])
+        hist_mq135 = [convert_mq135_adc_to_co2_ppm(val) for val in hist_mq135_raw]
+
+        hist_suhu = prediction.get("history_suhu", [])
+        hist_kelembaban = prediction.get("history_kelembaban", [])
+
+        # Combined timelines
         all_timestamps = list(hist_ts) + list(timestamps)
-        # Actual values: historical data + NaN for future
+
+        # PM10
         actual_debu = list(hist_debu) + [float("nan")] * len(timestamps)
-        # Predicted values: NaN for past + predicted for future
         pred_debu_full = [float("nan")] * len(hist_ts) + list(debu_pred)
 
-        # Calculate historical ISPU
-        hist_ispu = [round(calculate_ispu_pm10(val), 1) for val in hist_debu]
+        # MQ-7 (CO)
+        actual_mq7 = list(hist_mq7) + [float("nan")] * len(timestamps)
+        pred_mq7_full = [float("nan")] * len(hist_ts) + list(mq7_pred)
+
+        # MQ-135 (CO2)
+        actual_mq135 = list(hist_mq135) + [float("nan")] * len(timestamps)
+        pred_mq135_full = [float("nan")] * len(hist_ts) + list(mq135_pred)
+
+        # Suhu
+        actual_suhu = list(hist_suhu) + [float("nan")] * len(timestamps)
+        pred_suhu_full = [float("nan")] * len(hist_ts) + list(suhu_pred)
+
+        # Kelembaban
+        actual_kelembaban = list(hist_kelembaban) + [float("nan")] * len(timestamps)
+        pred_kelembaban_full = [float("nan")] * len(hist_ts) + list(kelembaban_pred)
+
+        # Calculate multi-pollutant historical ISPU
+        hist_ispu = []
+        for idx in range(len(hist_debu)):
+            h_pm10 = hist_debu[idx]
+            h_co = hist_mq7[idx] if idx < len(hist_mq7) else 0.0
+            h_co2 = hist_mq135[idx] if idx < len(hist_mq135) else 400.0
+            res = calculate_ispu(h_pm10, h_co, h_co2)
+            hist_ispu.append(res["ispu_final"])
+
         current_ispu = hist_ispu[-1] if hist_ispu else 0.0
 
         # Display analysis & mitigation summary card
         render_forecast_summary_card(ispu_pred, current_ispu)
 
         # ── Forecast Charts ──────────────────────────────────────────
-        tab_debu, tab_suhu, tab_kelembaban, tab_ispu = st.tabs(
-            ["PM10 (µg/m³)", "Suhu", "Kelembaban", "ISPU"]
+        tab_debu, tab_suhu, tab_kelembaban, tab_mq7, tab_mq135, tab_ispu = st.tabs(
+            ["PM10 (µg/m³)", "Suhu (°C)", "Kelembaban (%)", "CO MQ-7 (ppm)", "CO2 MQ-135 (ppm)", "ISPU"]
         )
 
         with tab_debu:
@@ -112,19 +148,37 @@ if model_available:
 
         with tab_suhu:
             fig = create_forecast_chart(
-                timestamps=timestamps,
-                actual_values=[float("nan")] * len(timestamps),
-                predicted_values=suhu_pred,
+                timestamps=all_timestamps,
+                actual_values=actual_suhu,
+                predicted_values=pred_suhu_full,
                 title="Prediksi Suhu (°C)",
             )
             st.plotly_chart(fig, use_container_width=True)
 
         with tab_kelembaban:
             fig = create_forecast_chart(
-                timestamps=timestamps,
-                actual_values=[float("nan")] * len(timestamps),
-                predicted_values=kelembaban_pred,
+                timestamps=all_timestamps,
+                actual_values=actual_kelembaban,
+                predicted_values=pred_kelembaban_full,
                 title="Prediksi Kelembaban (%)",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab_mq7:
+            fig = create_forecast_chart(
+                timestamps=all_timestamps,
+                actual_values=actual_mq7,
+                predicted_values=pred_mq7_full,
+                title="Prediksi CO MQ-7 (ppm)",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab_mq135:
+            fig = create_forecast_chart(
+                timestamps=all_timestamps,
+                actual_values=actual_mq135,
+                predicted_values=pred_mq135_full,
+                title="Prediksi CO2 MQ-135 (ppm)",
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -137,7 +191,7 @@ if model_available:
                 timestamps=all_timestamps,
                 actual_values=actual_ispu,
                 predicted_values=pred_ispu_full,
-                title="Prediksi ISPU (dari PM10)",
+                title="Prediksi ISPU (Multi-polutan)",
             )
             st.plotly_chart(fig, use_container_width=True)
 

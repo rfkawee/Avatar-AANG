@@ -9,7 +9,7 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from utils.helper import calculate_ispu_pm10, now_wib, WIB, convert_debu_adc_to_ugm3
+from utils.helper import calculate_ispu, now_wib, WIB, convert_debu_adc_to_ugm3, convert_mq7_adc_to_co_ppm, convert_mq135_adc_to_co2_ppm
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -196,6 +196,10 @@ def get_live_prediction(
     raw_matrix = []
     timestamps_history = []
     history_debu_raw = []
+    history_mq7_raw = []
+    history_mq135_raw = []
+    history_suhu = []
+    history_kelembaban = []
 
     for r in recent:
         row = [
@@ -208,6 +212,10 @@ def get_live_prediction(
         raw_matrix.append(row)
         timestamps_history.append(r["timestamp"])
         history_debu_raw.append(r["debu"])
+        history_mq7_raw.append(r["gas_mq7"])
+        history_mq135_raw.append(r["gas_mq135"])
+        history_suhu.append(r["suhu"])
+        history_kelembaban.append(r["kelembaban"])
 
     raw_arr = np.array(raw_matrix, dtype=np.float64)
     scaled_arr = scaler.transform(raw_arr)
@@ -241,6 +249,8 @@ def get_live_prediction(
     suhu_pred = []
     kelembaban_pred = []
     debu_pred = []
+    gas_mq7_pred = []
+    gas_mq135_pred = []
     ispu_predicted = []
 
     for i in range(steps):
@@ -250,15 +260,22 @@ def get_live_prediction(
         suhu_val = round(float(predictions_real[i, 0]), 1)
         kelembaban_val = round(float(predictions_real[i, 1]), 1)
         debu_val = round(float(predictions_real[i, 2]), 1)
+        mq7_val = round(float(predictions_real[i, 3]), 1)
+        mq135_val = round(float(predictions_real[i, 4]), 1)
 
-        # Convert raw ADC debu → µg/m³ for ISPU calculation
+        # Convert raw ADC → physical units for ISPU calculation
         pm10_ugm3 = convert_debu_adc_to_ugm3(debu_val)
+        co_ppm = convert_mq7_adc_to_co_ppm(mq7_val)
+        co2_ppm = convert_mq135_adc_to_co2_ppm(mq135_val)
 
-        ispu_val = round(calculate_ispu_pm10(pm10_ugm3), 1)
+        ispu_result = calculate_ispu(pm10_ugm3, co_ppm, co2_ppm)
+        ispu_val = ispu_result["ispu_final"]
 
         suhu_pred.append(suhu_val)
         kelembaban_pred.append(kelembaban_val)
         debu_pred.append(debu_val)
+        gas_mq7_pred.append(mq7_val)
+        gas_mq135_pred.append(mq135_val)
         ispu_predicted.append(ispu_val)
 
     logger.info(
@@ -272,7 +289,13 @@ def get_live_prediction(
         "suhu_predicted": suhu_pred,
         "kelembaban_predicted": kelembaban_pred,
         "debu_predicted": debu_pred,
+        "gas_mq7_predicted": gas_mq7_pred,
+        "gas_mq135_predicted": gas_mq135_pred,
         "ispu_predicted": ispu_predicted,
         "history_timestamps": timestamps_history,
         "history_debu": history_debu_raw,
+        "history_mq7": history_mq7_raw,
+        "history_mq135": history_mq135_raw,
+        "history_suhu": history_suhu,
+        "history_kelembaban": history_kelembaban,
     }
