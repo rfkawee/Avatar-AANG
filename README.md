@@ -9,8 +9,8 @@ AirSense is a premium, modern, and high-performance Web Dashboard built with **S
 - **📊 Modern Glassmorphic UI**: Vibrant, responsive, and state-of-the-art dark theme UI inspired by premium glassmorphism principles.
 - **🌡️ ISPU Index Calculation**: Real-time ISPU (Indeks Standar Pencemar Udara) category computation with interactive meter bars and action recommendations.
 - **🔌 Online/Offline Status Indicator**: Automatically checks if a device is active. Shows a status warning if no data has been received within 10 minutes.
-- **🔧 Device Management**: Complete CRUD interface to add, edit, status-check, or remove registered IoT device nodes.
-- **🔮 Time-Series ML Forecasting**: Real-time 1-hour air quality predictions using a trained LSTM (Long Short-Term Memory) neural network, complete with premium glassmorphism trend analysis and custom health mitigation recommendation cards.
+- **🔧 Sidebar Device Management**: Integrated CRUD interface in the sidebar to add new devices, edit, or remove registered IoT device nodes via interactive modal dialogs.
+- **🔮 Time-Series ML Forecasting**: Real-time 1-hour multi-variable predictions (PM10, Suhu, Kelembaban, CO, CO2) using a trained LSTM (Long Short-Term Memory) neural network, visualizing historical actual curves alongside predicted paths with custom health mitigation recommendations.
 
 ---
 
@@ -50,9 +50,7 @@ air_quality_monitoring/
 │
 ├── pages/                     # Individual page dashboards
 │   ├── dashboard.py           # Main KPI & status summary page
-│   ├── forecasting.py         # LSTM air quality forecasting dashboard page
-│   ├── alerts.py              # System notifications & air quality warnings
-│   ├── devices.py             # CRUD management for IoT devices
+│   ├── forecasting.py         # LSTM air quality forecasting (and Alert Centre) page
 │   └── about.py               # Documentation and project info
 │
 ├── services/                  # Business logic & APIs
@@ -78,12 +76,12 @@ kualitas_udara/                     [Collection]
   └── {device_id}/                  [Document]
         └── logs/                   [Subcollection]
               └── {document_id}/    [Document]
-                    ├── suhu        : 34.4 (Double)
-                    ├── kelembaban  : 62.9 (Double)
-                    ├── mq7         : 1.2 (Double)
-                    ├── mq135       : 1.0 (Double)
-                    ├── pm10        : 14.5 (Double)
-                    └── waktu       : "2026-07-07 14:51:26" (String)
+                    ├── suhu        : 34.6 (Double)
+                    ├── kelembaban  : 51.6 (Double)
+                    ├── gas_co_mq7  : 95.0 (Double, raw ADC)
+                    ├── gas_mq135   : 90.0 (Double, raw ADC)
+                    ├── debu        : 265.0 (Double, raw ADC)
+                    └── waktu       : "2026-07-09 11:10:31" (String)
 ```
 
 ---
