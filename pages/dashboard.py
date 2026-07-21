@@ -134,43 +134,43 @@ with c6:
 
 st.write("")
 
-# ── ISPU Sub-Index Breakdown ────────────────────────────────────────────
-st.markdown("### 🔬 ISPU Sub-Index Breakdown")
+# # ── ISPU Sub-Index Breakdown ────────────────────────────────────────────
+# st.markdown("### 🔬 ISPU Sub-Index Breakdown")
 
-ispu_pm10_val  = reading.get("ispu_pm10",  0.0)
-ispu_co_val    = reading.get("ispu_co",    0.0)
-ispu_mq135_val = reading.get("ispu_mq135", 0.0)
-ispu_final_val = reading.get("ispu_final", 0.0)
+# ispu_pm10_val  = reading.get("ispu_pm10",  0.0)
+# ispu_co_val    = reading.get("ispu_co",    0.0)
+# ispu_mq135_val = reading.get("ispu_mq135", 0.0)
+# ispu_final_val = reading.get("ispu_final", 0.0)
 
-cat_color = reading.get("category", {}).get("color", "#3b82f6")
+# cat_color = reading.get("category", {}).get("color", "#3b82f6")
 
-def _ispu_bar(label: str, value: float, color: str, icon: str) -> str:
-    pct = min((value / 500) * 100, 100)
-    is_dominant = (value == ispu_final_val and value > 0)
-    border = f"border: 2px solid {color};" if is_dominant else "border: 1px solid rgba(255,255,255,0.08);"
-    crown  = " 👑" if is_dominant else ""
-    return f"""
-    <div style="background:rgba(17,25,40,0.6);{border}border-radius:12px;padding:16px 20px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <span style="font-size:0.85rem;font-weight:600;color:#9ca3af;">{icon} {label}{crown}</span>
-            <span style="font-size:1.4rem;font-weight:800;color:{color};">{value:.1f}</span>
-        </div>
-        <div style="background:rgba(255,255,255,0.05);border-radius:6px;height:6px;overflow:hidden;">
-            <div style="background:{color};height:100%;width:{pct:.1f}%;border-radius:6px;"></div>
-        </div>
-    </div>"""
+# def _ispu_bar(label: str, value: float, color: str, icon: str) -> str:
+#     pct = min((value / 500) * 100, 100)
+#     is_dominant = (value == ispu_final_val and value > 0)
+#     border = f"border: 2px solid {color};" if is_dominant else "border: 1px solid rgba(255,255,255,0.08);"
+#     crown  = " 👑" if is_dominant else ""
+#     return f"""
+#     <div style="background:rgba(17,25,40,0.6);{border}border-radius:12px;padding:16px 20px;">
+#         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+#             <span style="font-size:0.85rem;font-weight:600;color:#9ca3af;">{icon} {label}{crown}</span>
+#             <span style="font-size:1.4rem;font-weight:800;color:{color};">{value:.1f}</span>
+#         </div>
+#         <div style="background:rgba(255,255,255,0.05);border-radius:6px;height:6px;overflow:hidden;">
+#             <div style="background:{color};height:100%;width:{pct:.1f}%;border-radius:6px;"></div>
+#         </div>
+#     </div>"""
 
-sub_col1, sub_col2, sub_col3 = st.columns(3)
-with sub_col1:
-    st.markdown(_ispu_bar("PM10 (Debu)",   ispu_pm10_val,  "#06b6d4", "💨"), unsafe_allow_html=True)
-with sub_col2:
-    st.markdown(_ispu_bar("CO (MQ7)",       ispu_co_val,    "#f59e0b", "🏭"), unsafe_allow_html=True)
-with sub_col3:
-    st.markdown(_ispu_bar("Gas CO₂ (MQ135)", ispu_mq135_val, "#a855f7", "🌫️"), unsafe_allow_html=True)
+# sub_col1, sub_col2, sub_col3 = st.columns(3)
+# with sub_col1:
+#     st.markdown(_ispu_bar("PM10 (Debu)",   ispu_pm10_val,  "#06b6d4", "💨"), unsafe_allow_html=True)
+# with sub_col2:
+#     st.markdown(_ispu_bar("CO (MQ7)",       ispu_co_val,    "#f59e0b", "🏭"), unsafe_allow_html=True)
+# with sub_col3:
+#     st.markdown(_ispu_bar("Gas CO₂ (MQ135)", ispu_mq135_val, "#a855f7", "🌫️"), unsafe_allow_html=True)
 
-st.caption("👑 = Sub-index paling tinggi yang menentukan nilai ISPU final.")
+# st.caption("👑 = Sub-index paling tinggi yang menentukan nilai ISPU final.")
 
-st.write("")
+# st.write("")
 
 # ── ISPU Status Card ────────────────────────────────────────────────────
 category = reading.get("category", {})
