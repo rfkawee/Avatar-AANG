@@ -243,9 +243,22 @@ else:
 st.markdown("### 📊 Alert Summary")
 summary = get_alert_summary()
 
-if summary:
-    cols = st.columns(len(summary) if summary else 1)
-    for idx, (category_label, count) in enumerate(summary.items()):
+total_alerts    = summary.get("total", 0) if summary else 0
+unack_alerts    = summary.get("unacknowledged", 0) if summary else 0
+by_category     = summary.get("by_category", {}) if summary else {}
+
+# Metric row: total & unacknowledged
+mc1, mc2 = st.columns(2)
+with mc1:
+    st.metric("🔔 Total Alerts", total_alerts)
+with mc2:
+    st.metric("⚠️ Unacknowledged", unack_alerts)
+
+st.write("")
+
+if by_category:
+    cols = st.columns(len(by_category))
+    for idx, (category_label, count) in enumerate(by_category.items()):
         # Find colour from constants
         cat_color = "#8b949e"
         for cat in ISPU_CATEGORIES:

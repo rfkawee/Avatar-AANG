@@ -14,6 +14,7 @@ import streamlit as st
 from config.firebase_config import is_offline_mode
 from config.settings import COLLECTION_DEVICES
 from services.firebase_service import get_collection, query_collection
+from services.alert_service import check_and_create_alert
 from utils.constants import (
     DEFAULT_DEVICE_IDS,
     MOCK_RANGES,
@@ -227,6 +228,11 @@ def get_latest_reading(device_id: str) -> Optional[Dict[str, Any]]:
         for doc in docs:
             reading = _map_esp_reading(doc, device_id)
             if not is_outlier_reading(reading, prev):
+                # ── Trigger alert jika ISPU melewati threshold ──────────────
+                try:
+                    check_and_create_alert(device_id, reading)
+                except Exception as alert_err:
+                    logger.warning("Alert check failed for '%s': %s", device_id, alert_err)
                 return reading   # first valid reading wins
             logger.debug(
                 "[OUTLIER] Skipped latest doc '%s' for device '%s'.",
